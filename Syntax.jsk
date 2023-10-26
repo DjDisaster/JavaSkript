@@ -1,5 +1,5 @@
 Broadcast %%object%%:
-	ConvertType: Simple 
+	ConvertType: Simple
 	ConvertInto: Bukkit.broadcastMessage(%expr-1%);
 
 commit a war crime:
