@@ -1,0 +1,406 @@
+#
+#	
+# JavaSkript,
+# A simple Transpiler from Skript to Java.
+# Not recommended for use on everything but
+# Can be useful for small things you need to
+# Run faster than skript can execute them.
+# Actually pretty bad, dont use it lol
+#
+#
+import:
+	java.lang.Character
+	java.lang.StringBuilder
+	java.io.Closeable
+	javax.tools.ToolProvider
+	javax.tools.JavaFileObject
+	javax.tools.StandardJavaFileManager	
+	java.io.FileWriter
+	java.io.File
+	java.lang.Class
+	java.util.ArrayList
+	java.nio.file.Files
+	java.nio.charset.StandardCharsets
+	org.bukkit.Bukkit
+	org.bukkit.plugin.java.JavaPlugin
+	java.net.URLClassLoader
+	com.btk5h.skriptmirror.util.lookup.LookupGetter
+	java.nio.file.Path
+	org.apache.commons.io.FileUtils
+	java.io.FileOutputStream
+	java.nio.channels.ReadableByteChannel
+	java.nio.channels.Channels
+	java.net.URL
+	java.util.regex.Matcher
+	java.util.regex.Pattern
+	java.nio.file.StandardCopyOption
+	java.nio.file.Paths
+	java.io.InputStream
+# Tokens:
+# Literal
+# Number
+# 
+# 
+# 
+# 
+# 
+options:
+	# Changes what the default directory is.
+	DefaultDirectory: "plugins/Skript/JavaSkript"
+	LibsDefault: "plugins/Skript/Libs/"
+	# Do NOT change the below options.
+	name: "com.btk5h.skriptmirror.util.lookup"
+	
+on script load:
+	wait a tick 
+	set {JavaSkript::FileName} to name of script
+on load:
+	set {_file} to new File("%{@LibsDefault}%")
+	{_file}.mkdir()
+	set {_link} to "https://hub.spigotmc.org/nexus/service/local/repositories/snapshots/content/org/spigotmc/spigot-api/1.20.1-R0.1-SNAPSHOT/spigot-api-1.20.1-R0.1-20230906.110223-62.jar"
+	set {_inStream} to new URL({_link})
+	set {_inStream} to {_inStream}.openStream()
+	Files.copy({_inStream}, Paths.get("%{@LibsDefault}%Spigot.jar"), StandardCopyOption.REPLACE_EXISTING)
+	
+
+	add 1 to {Reloads}
+	set {_text::*} to "on load:", "	loop 2 times:", "		loop 2 times:", "			loop 2 times:", "				broadcast ""hi there"""
+	delete {JavaSkript::*}
+	set {JavaSkript::Libs::*} to "Spigot.jar"
+	set {JavaSkript::Types::*} to "String", "Number"
+	# Type names must be defined here for objects to work.
+	
+	# effects
+	AddSyntax("{Syntax:""broadcast %%object%%"",ConvertType:""Simple"",ConvertInto:""Bukkit.broadcastMessage(%%expr-1%%);""}")
+	#AddSyntax("{Syntax:""[no|destroy|delete|ban] astrid"",ConvertType:""Simple"",ConvertInto:""Bukkit.getBanList(BanList.Type.NAME).addBan(\""astrrid\"", \""Reason for ban\"", null, \""JavaSkript Effect\"");")
+	AddSyntax("{Syntax:""commit a war crime"",ConvertType:""Simple"",ConvertInto:""Bukkit.broadcastMessage(\""We are commiting a war crime in 60s...\"");""}")
+	AddSyntax("{Syntax:""stop server"",ConvertType:""Simple"",ConvertInto:""Bukkit.shutdown();""}")
+	# events
+	AddSyntax("{Syntax:""on load"",ConvertType:""Simple"",ConvertInto:""static""}")
+	
+	# Things with specific cases:
+	# - LOOPS
+	AddSyntax("{Syntax:""loop %%number%% times"",ConvertType:""Simple"",ConvertInto:""for(int [ln] = 0; [ln] < %%expr-1%%; ++[ln])"",Rule:""LoopRule"",Placeholder:""ln""}")
+	
+	CreateSections()
+	
+	loop {_text::*}:
+		add 1 to {JavaSkript::IDS}
+		broadcast "&7Tokenizing &e%loop-value%"
+		add tokenize(loop-value) to {_tokens::*}
+	broadcast "&6Tokens", ""
+	add 1 to {JavaSkript::ParseNum}
+	set {_className} to "TestClass%{Reloads}%"
+	set {JavaSkript::Text::%{JavaSkript::ParseNum}%::*} to "package %{@name}%;%nl%import org.bukkit.Bukkit; public class %{_className}% {"
+	set {_indentation} to 0
+	loop {_tokens::*}:
+		broadcast pretty nbt of loop-value
+		set {_indentation} to ParseToken(loop-value, {JavaSkript::ParseNum}, {_indentation})
+	set {_newIndentation} to 0
+	if {_indentation} != {_newIndentation}:
+		while {_newIndentation} > {_indentation}:
+			add nl, "{" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+			remove 1 from {_newIndentation}
+		while {_newIndentation} < {_indentation}:
+			add nl, "}" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+			add 1 to {_newIndentation}
+		
+		
+	add "%nl%}" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+	broadcast join {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+	set {_cls} to CompileAndGetClass("TestClass%{Reloads}%", join {JavaSkript::Text::%{JavaSkript::ParseNum}%::*})
+	#broadcast "cls: %{_cls}%"
+	#set {_method} to {_cls}.getMethod("test")
+	#{_method}.invoke(null)
+function CompileAndGetClass(ClassName: string, Code: string, b: boolean=true) :: object:
+	if {_b} = true:
+		set {_root} to join {@DefaultDirectory}, {_root}
+	#set {_code} to join "package %{@name}%;%nl%", {_code}
+	set {_source} to new File({_root}, "%{_className}%.java")
+	{_source}.getParentFile().mkdirs()
+	{_source}.createNewFile()
+	Files.write({_source}.toPath(), {_code}.getBytes(StandardCharsets.UTF_8))
+	set {_options} to new ArrayList()
+	{_options}.add("-classpath")
+	loop {JavaSkript::Libs::*}:
+		{_options}.add(join {@LibsDefault}, "%loop-value%", File.pathSeparator, "jar")
+	set {_compiler} to ToolProvider.getSystemJavaCompiler()
+	set {_fileManager} to {_compiler}.getStandardFileManager(null, null, null)
+	set {_compilationUnits} to {_fileManager}.getJavaFileObjects({_source})
+	set {_task} to {_compiler}.getTask(null, {_fileManager}, null, {_options}, null, {_compilationUnits})
+	set {_taskResult} to {_task}.call()
+	set {_classFilePath} to new File({_root}, "%{_className}%.class")
+	set {_bytecode} to Files.readAllBytes({_classFilePath}.toPath())
+	set {_lookup} to LookupGetter.getLookup()
+	set {_definedClass} to {_lookup}.defineClass({_bytecode})
+	
+	Class.forName("com.btk5h.skriptmirror.util.lookup.%{_className}%")
+	# Used to load anything static if nothing else is referenced.
+
+	return {_definedClass}
+	
+function CurrentRule(indentation: number, token: nbt compound) :: boolean:
+	if {JavaSkript::CurrentRule} is not set:
+		return true
+	set {_newIndentation} to double tag "indentation" of {_token}
+	run section {JavaSkript::CurrentRule} with {_token}, {_indentation} and store result in {_b}
+	
+	#return {_b}
+	# yeah no1 cares about rules
+	return true
+function CreateSections():
+	set {JavaSkript::Placeholders::LN} to "i1"
+	create section with {_token}, {_newIndentation} stored in {JavaSkript::Rules::LoopRule}:
+		set {_f} to {JavaSkript::Placeholders::LN}.substring(1) parsed as number
+		set {JavaSkript::Placeholders::LN} to "i%{_f} + 1%"
+		set {_indentation} to tag "indentation" of {_token}
+		return true if {_newIndentation} = ({_indentation} + 1) else false
+
+
+function ParseToken(token: nbt compound, n: number, indentation: number) :: number:
+	set {_syntax} to double tag "syntax;syntaxIndex" of {_token}
+	set {_syntax} to {JavaSkript::Syntax::%{_syntax}%}
+	set {_newIndentation} to double tag "indentation" of {_token}
+	set {_type} to tag "ConvertType" of {_syntax}
+	set {_f} to {_newIndentation}
+	
+	set {_m} to tag "syntax;syntaxIndex" of {_token}
+	set {_nbtOfFound} to {JavaSkript::Syntax::%{_m}%}
+	broadcast "&b%{_nbtOfFound}%"
+	if CurrentRule({_indentation}, {_token}) = false:
+		broadcast "&cAn error will a rule has accured."
+		stop
+	if {_indentation} != {_newIndentation}:
+		broadcast "!="
+		while {_newIndentation} > {_indentation}:
+			add nl, "{" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+			remove 1 from {_newIndentation}
+			broadcast "{"
+		while {_newIndentation} < {_indentation}:
+			add nl, "}" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+			add 1 to {_newIndentation}
+			broadcast "}"
+	if {_type} = "Simple":	
+		set {_simple} to tag "ConvertInto" of {_syntax}
+		loop 100 times:
+			if tag "%loop-value%" of {_token} is not set:
+				stop loop 
+			add 1 to {_times}
+			set {_a} to tag "%loop-value%" of {_token}
+			set {_type} to tag "Token" of {_a}
+			if {_type} != "Literal":
+				set {_value} to tag "Value" of {_a}
+				add {_value} to {_expr::*}
+				broadcast "+ %{_value}%"
+			broadcast "&c&n%loop-value%"
+		broadcast "S: %{_times}%"
+		
+		loop reversed {_times} times:
+			replace all "%%expr-%loop-value%%%" in {_simple} with "%{_expr::%loop-value%}%"
+			broadcast "REPLACE [%{_simple}% [%{_expr::%loop-value%}%] (%{_expr::*}%)"
+		if tag "Placeholder" of {_nbtOfFound} is set:
+			set {_ph} to tag "Placeholder" of {_nbtOfFound}
+			replace all "[%{_ph}%]" in {_simple} with "%{JavaSkript::PlaceHolders::%{_ph}%}%"
+			broadcast "Placeholder CHANGE TO: %{JavaSkript::PlaceHolders::%{_ph}%}%"
+			broadcast "&3&n%{_simple}%&r CHANGE: [%{_ph}%]"
+		add nl, {_simple} to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
+	if tag "Rule" of {_nbtOfFound} is set:
+		set {_rule} to tag "Rule" of {_nbtOfFound}
+		set {JavaSkript::CurrentRule} to {JavaSkript::Rules::%{_rule}%}
+	broadcast "&3%{_f}%"
+	return {_f}
+function AddSyntax(s: string, n: num=0):
+	add 1 to {_n}
+	if {_n} >= 5:
+		broadcast "&cSYNTAX EXCEEDED MAX ITERATIONS &e[%{_s}%]"
+		stop
+	
+	set {_s} to nbt from {_s}
+	set {_tag} to tag "Syntax" of {_s}
+	set {_del::*} to ...{_tag}.split("\[|\]")[1].split("\|")
+	if {_del::*} is not set:
+	
+		# Now checking for object and converting to every type for easier parsing
+		if {_tag} contains "%%object%%":
+			loop {JavaSkript::Types::*}:
+				set {_full} to {_tag}
+				replace first "%%object%%" in {_full} with "%%%loop-value%%%"
+				set {_a} to {_s}
+				set tag "Syntax" of {_a} to {_full}
+				AddSyntax("%{_a}%", {_n})
+			stop
+	
+		add 1 to {JavaSkript::SyntaxNum}
+		set {JavaSkript::Syntax::%{JavaSkript::SyntaxNum}%} to {_s}
+		run section {_run}
+		stop
+		
+	else:
+		set {_removeFirst} to join "[", {_tag}.split("\[|\]")[1], "]"
+		loop {_del::*}:
+			set {_full} to {_tag}
+			replace first {_removeFirst} in {_full} with loop-value
+		
+			set {_a} to {_s}
+			set tag "Syntax" of {_a} to {_full}
+			AddSyntax("%{_a}%", {_n})
+
+function tokenize(s: string) :: nbt compound:
+	# 0 = default
+	
+	set {_id} to {JavaSkript::IDS}
+	set {_tokens} to nbt from "{}"
+	set {JavaSkript::Index::%{_id}%} to 0
+	set {JavaSkript::Input::%{_id}%} to {_s}
+	set {_tokenAmm} to 0
+	
+	while {_s} starts with "	":
+		set {_s} to {_s}.substring(1, {_s}.length())
+		add 1 to {_indentation}
+		
+		add 1 to {_f}
+		if {_f} >= 1000:
+			stop 
+	broadcast "&4&l&nF IS %{_f}% &b[%{_s}%]"
+	
+	while {JavaSkript::Index::%{_id}%} < {_s}.length():
+		set {_m} to false
+		set {_current} to peek({JavaSkript::Index::%{_id}%}, {JavaSkript::Input::%{_id}%})
+		if (Character.isDigit({_current})) = true:
+			set {_add} to tokenizeNumber({_id}, {_tokens})
+			remove 1 from {JavaSkript::Index::%{_id}%}
+			set {_m} to true
+		else if (Character.isLetter({_current})):
+			set {_add} to tokenizeIdentifier({_id}, {_current})
+			set {_m} to true
+		else if "%{_current}%" = """":
+			set {_add} to tokenizeString({_id}, {_current})
+		else if "%{_current}%" = "{":
+			set {_add} to tokenizeVariable({_id}, {_current})
+		set tag "%{_tokenAmm}%" of {_tokens} to {_add}
+		add 1 to {JavaSkript::Index::%{_id}%}
+		if {_m} = true:
+			add 1 to {_tokenAmm}
+	set {_s} to GetFullFromTokens({_tokens})
+	set tag "final" of {_tokens} to {_s}
+	set tag "syntax" of {_tokens} to MatchSyntax({_s})
+	set tag "indentation" of {_tokens} to {_indentation}
+	return {_tokens}
+function MatchSyntax(s: string) :: nbt compound:
+	set {_return} to nbt from "{}"
+	set {_s2} to tag "final" of {_s}
+	broadcast "&e%{_s}%"
+	loop {JavaSkript::Syntax::*}:
+		if tag "Syntax" of loop-value = {_s}:
+			set {_match} to loop-index 
+			stop loop 
+		broadcast "%tag "Syntax" of loop-value% - %{_s}% [%{_s2}%]"
+	broadcast "Match: %{_match}%"
+	if {_match} is not set:
+		set tag "matches" of {_return} to false
+	else:
+		set tag "matches" of {_return} to true
+		set double tag "syntaxIndex" of {_return} to ("%{_match}%" parsed as num)
+	return {_return}
+function tokenizeNumber(id: num, tokens: nbt compound) :: nbt compound:
+	broadcast "ITS A NUMBER"
+	set {_stringBuilder} to new StringBuilder()
+	set {_dp} to false
+	while ({_true} ? true) = true:	
+		broadcast "LOOPING! "
+		set {_char} to {JavaSkript::Input::%{_id}%}.charAt({JavaSkript::Index::%{_id}%})
+		broadcast "CA HARL %{_char}%"
+		if (Character.isDigit(peek({JavaSkript::Index::%{_id}%}, {JavaSkript::Input::%{_id}%}))) = false:
+			broadcast "CHARL %{_char}%"
+			if "%{_char}%" != "." or ",":
+				set {_true} to false 
+			else if "%{_char}%" = ",":
+				add 1 to {JavaSkript::Index::%{_id}%}
+				continue
+			else:
+				set {_true} to false if {_dp} = true
+				set {_dp} to true if {_dp} = false
+				
+			
+		if {_char} is not set:
+			stop loop
+		{_stringBuilder}.append({_char})
+		add 1 to {JavaSkript::Index::%{_id}%}
+		add 1 to {_nnn}
+		if {_nnn} > 308:
+			broadcast "Number Exceeded Double limit..?"
+			stop
+	broadcast "T: %{_stringBuilder}.toString()%"
+	return nbt from "{Token:""Number"",Value:%{_stringBuilder}.toString()%}"
+function tokenizeString(id: num, tokens: nbt compound) :: nbt compound:
+	set {_stringBuilder} to new StringBuilder()
+	add 1 to {JavaSkript::Index::%{_id}%}
+	while "%peek({JavaSkript::Index::%{_id}%}, {JavaSkript::Input::%{_id}%})%" != """":
+		set {_char} to {JavaSkript::Input::%{_id}%}.charAt({JavaSkript::Index::%{_id}%})
+		if {_char} is not set:
+			stop loop
+		{_stringBuilder}.append({_char})
+		add 1 to {JavaSkript::Index::%{_id}%}
+		add 1 to {_f}
+		if {_f} >= 1000:
+			stop
+	broadcast "String: %{_stringBuilder}.toString()%"
+	return nbt from "{Token:""String"",Value:""\""%{_stringBuilder}.toString()%\""""}"
+function tokenizeVariable(id: num, tokens: nbt compound) :: nbt compound:
+	set {_stringBuilder} to new StringBuilder()
+	add 1 to {JavaSkript::Index::%{_id}%}
+	while "%peek({JavaSkript::Index::%{_id}%}, {JavaSkript::Input::%{_id}%})%" != "}":
+		set {_char} to {JavaSkript::Input::%{_id}%}.charAt({JavaSkript::Index::%{_id}%})
+		if {_char} is not set:
+			stop loop
+		{_stringBuilder}.append({_char})
+		add 1 to {JavaSkript::Index::%{_id}%}
+		add 1 to {_f}
+		if {_f} >= 1000:
+			stop
+	broadcast "Variable: %{_stringBuilder}.toString()%"
+	return nbt from "{Token:""Variable"",Value:""%{_stringBuilder}.toString()%""}"
+function tokenizeIdentifier(id: num, tokens: nbt compound) :: nbt compound:
+	set {_stringBuilder} to new StringBuilder()
+	while (Character.isLetter(peek({JavaSkript::Index::%{_id}%}, {JavaSkript::Input::%{_id}%}))) = true:
+		set {_char} to {JavaSkript::Input::%{_id}%}.charAt({JavaSkript::Index::%{_id}%})
+		if {_char} is not set:
+			stop loop
+		{_stringBuilder}.append({_char})
+		add 1 to {JavaSkript::Index::%{_id}%}
+	return nbt from "{Token:""Literal"",Value:%{_stringBuilder}.toString()%}"
+function GetFullFromTokens(nbt: nbt compound) :: string:
+	set {_keys::*} to nbt tags of {_nbt}
+	set {_Str} to ""
+	loop {_keys::*}:
+		set {_token} to string tag "%loop-value%;Token" of {_nbt}
+		set {_value} to tag "%loop-value%;Value" of {_nbt}
+		broadcast "%{_token}%,%{_value}%"
+		
+		if {_token} = "Literal":
+			set {_str} to join {_str}, "%{_value}% "
+		else:
+			set {_str} to join {_str}, "%%%{_token}%%% "
+	return  {_str}.substring(0, {_str}.length()-1)
+		
+			
+
+function peek(index: num, input: string) :: object:
+	if {_index} >= {_input}.length():
+		return "0".charAt(0)
+	return {_input}.charAt({_index})
+	
+	
+command /JavaSkript [<text>]:
+	trigger:
+		player is set:
+			player is not op:
+				send "&7This requires &eOPERATOR &7privileges."
+				stop 
+		if arg-1 = "Update":
+			set {_file} to new File("plugins/Skript/scripts/%{JavaSkript::FileName}%")
+			
+			set {_link} to "https://raw.githubusercontent.com/DaRealPilot/JavaSkript/main/JavaSkript.sk"
+			set {_inStream} to new URL({_link})
+			set {_inStream} to {_inStream}.openStream()
+			Files.copy({_inStream}, {_file}.getPath(), StandardCopyOption.REPLACE_EXISTING)
