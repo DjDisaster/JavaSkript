@@ -13,6 +13,7 @@ stop server:
 on load:
 	ConvertType: Simple
 	ConvertInto: static
+
 loop %number% times:
 	ConvertType: Simple
 	ConvertInto: for(int [ln] = 0; [ln] < %expr-1%; ++[ln])
