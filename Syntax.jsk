@@ -1,4 +1,4 @@
-Broadcast %%object%%:
+Broadcast %object%:
 	ConvertType: Simple
 	ConvertInto: Bukkit.broadcastMessage(%expr-1%);
 
