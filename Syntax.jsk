@@ -1,0 +1,15 @@
+Broadcast %%object%%:
+	ConvertType: Simple 
+	ConvertInto: Bukkit.broadcastMessage(%expr-1%);
+
+commit a war crime:
+	ConvertType: Simple
+	ConvertInto: Bukkit.broadcastMessage("We are commiting a war crime in 60s...");
+
+stop server:
+	ConvertType: Simple
+	ConvertInto: Bukkit.shutdown();
+
+on load:
+	ConvertType: Simple
+	ConvertInto: static
