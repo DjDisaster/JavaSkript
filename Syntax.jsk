@@ -19,3 +19,8 @@ loop %number% times:
 	ConvertInto: for(int [ln] = 0; [ln] < %expr-1%; ++[ln])
 	Rule: LoopRule
 	Placeholder: ln
+
+expression all players:
+	return type: Player
+	return: list
+	ConvertInto: Bukkit.getOnlinePlayers()
