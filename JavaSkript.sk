@@ -22,6 +22,7 @@ import:
 	java.nio.file.Files
 	java.nio.charset.StandardCharsets
 	org.bukkit.Bukkit
+	java.util.List
 	org.bukkit.plugin.java.JavaPlugin
 	java.net.URLClassLoader
 	com.btk5h.skriptmirror.util.lookup.LookupGetter
@@ -36,6 +37,9 @@ import:
 	java.nio.file.StandardCopyOption
 	java.nio.file.Paths
 	java.io.InputStream
+	java.util.zip.ZipEntry
+	java.util.zip.ZipInputStream
+	java.io.FileInputStream
 # Tokens:
 # Literal
 # Number
@@ -46,8 +50,9 @@ import:
 # 
 options:
 	# Changes what the default directory is.
-	DefaultDirectory: "plugins/Skript/JavaSkript"
-	LibsDefault: "plugins/Skript/Libs/"
+	DefaultDirectory: "plugins/Skript/JavaSkript/Classes"
+	LibsDefault: "plugins/Skript/JavaSkript/Libs/"
+	JSKDefault: "plugins/Skript/JavaSkript/Syntax.jsk"
 	# Do NOT change the below options.
 	name: "com.btk5h.skriptmirror.util.lookup"
 	
@@ -55,32 +60,28 @@ on script load:
 	wait a tick 
 	set {JavaSkript::FileName} to name of script
 on load:
-	set {_file} to new File("%{@LibsDefault}%")
+	set {_file} to new File({@LibsDefault})
 	{_file}.mkdir()
 	set {_link} to "https://hub.spigotmc.org/nexus/service/local/repositories/snapshots/content/org/spigotmc/spigot-api/1.20.1-R0.1-SNAPSHOT/spigot-api-1.20.1-R0.1-20230906.110223-62.jar"
 	set {_inStream} to new URL({_link})
 	set {_inStream} to {_inStream}.openStream()
 	Files.copy({_inStream}, Paths.get("%{@LibsDefault}%Spigot.jar"), StandardCopyOption.REPLACE_EXISTING)
-	
+	set {_file} to new File({@JSKDefault})
+	if {_file}.exists() != true:
+		UpdateJSK()
+	set {_file} to new File(join {@LibsDefault}, "VariableManager.jar")
+	if {_file}.exists() != true:
+		UpdateVariableManager()
 
 	add 1 to {Reloads}
-	set {_text::*} to "on load:", "	loop 2 times:", "		loop 2 times:", "			loop 2 times:", "				broadcast ""hi there"""
+	set {_text::*} to "on load:", "	loop 2 times:", "		broadcast ""yo"""
 	delete {JavaSkript::*}
-	set {JavaSkript::Libs::*} to "Spigot.jar"
+	set {JavaSkript::Libs::*} to "Spigot.jar"#, "VariableManager.jar"
 	set {JavaSkript::Types::*} to "String", "Number"
 	# Type names must be defined here for objects to work.
+	ReadJSK()
 	
-	# effects
-	AddSyntax("{Syntax:""broadcast %%object%%"",ConvertType:""Simple"",ConvertInto:""Bukkit.broadcastMessage(%%expr-1%%);""}")
-	#AddSyntax("{Syntax:""[no|destroy|delete|ban] astrid"",ConvertType:""Simple"",ConvertInto:""Bukkit.getBanList(BanList.Type.NAME).addBan(\""astrrid\"", \""Reason for ban\"", null, \""JavaSkript Effect\"");")
-	AddSyntax("{Syntax:""commit a war crime"",ConvertType:""Simple"",ConvertInto:""Bukkit.broadcastMessage(\""We are commiting a war crime in 60s...\"");""}")
-	AddSyntax("{Syntax:""stop server"",ConvertType:""Simple"",ConvertInto:""Bukkit.shutdown();""}")
-	# events
-	AddSyntax("{Syntax:""on load"",ConvertType:""Simple"",ConvertInto:""static""}")
-	
-	# Things with specific cases:
-	# - LOOPS
-	AddSyntax("{Syntax:""loop %%number%% times"",ConvertType:""Simple"",ConvertInto:""for(int [ln] = 0; [ln] < %%expr-1%%; ++[ln])"",Rule:""LoopRule"",Placeholder:""ln""}")
+	wait a second
 	
 	CreateSections()
 	
@@ -180,8 +181,11 @@ function ParseToken(token: nbt compound, n: number, indentation: number) :: numb
 			add nl, "}" to {JavaSkript::Text::%{JavaSkript::ParseNum}%::*}
 			add 1 to {_newIndentation}
 			broadcast "}"
-	if {_type} = "Simple":	
+	broadcast "! TYPE: [%{_type}%]"
+	if "%{_type}%" = "Simple":	
+		broadcast "TP"
 		set {_simple} to tag "ConvertInto" of {_syntax}
+		broadcast "SI: %{_simple}%"
 		loop 100 times:
 			if tag "%loop-value%" of {_token} is not set:
 				stop loop 
@@ -209,13 +213,13 @@ function ParseToken(token: nbt compound, n: number, indentation: number) :: numb
 		set {JavaSkript::CurrentRule} to {JavaSkript::Rules::%{_rule}%}
 	broadcast "&3%{_f}%"
 	return {_f}
-function AddSyntax(s: string, n: num=0):
+function AddSyntax(s: nbt compound, n: num=0):
 	add 1 to {_n}
 	if {_n} >= 5:
 		broadcast "&cSYNTAX EXCEEDED MAX ITERATIONS &e[%{_s}%]"
 		stop
 	
-	set {_s} to nbt from {_s}
+
 	set {_tag} to tag "Syntax" of {_s}
 	set {_del::*} to ...{_tag}.split("\[|\]")[1].split("\|")
 	if {_del::*} is not set:
@@ -225,13 +229,14 @@ function AddSyntax(s: string, n: num=0):
 			loop {JavaSkript::Types::*}:
 				set {_full} to {_tag}
 				replace first "%%object%%" in {_full} with "%%%loop-value%%%"
-				set {_a} to {_s}
+				set {_a} to nbt from "%{_s}%"
 				set tag "Syntax" of {_a} to {_full}
-				AddSyntax("%{_a}%", {_n})
+				AddSyntax({_a}, {_n})
 			stop
 	
 		add 1 to {JavaSkript::SyntaxNum}
 		set {JavaSkript::Syntax::%{JavaSkript::SyntaxNum}%} to {_s}
+		broadcast "&a%{JavaSkript::SyntaxNum}% &c[%{_s}%]"
 		run section {_run}
 		stop
 		
@@ -243,7 +248,7 @@ function AddSyntax(s: string, n: num=0):
 		
 			set {_a} to {_s}
 			set tag "Syntax" of {_a} to {_full}
-			AddSyntax("%{_a}%", {_n})
+			AddSyntax({_a}, {_n})
 
 function tokenize(s: string) :: nbt compound:
 	# 0 = default
@@ -398,9 +403,63 @@ command /JavaSkript [<text>]:
 				send "&7This requires &eOPERATOR &7privileges."
 				stop 
 		if arg-1 = "Update":
-			set {_file} to new File("plugins/Skript/scripts/%{JavaSkript::FileName}%")
+			set {_f} to "plugins/Skript/scripts/%{JavaSkript::FileName}%.sk"
+			set {_file} to new File({_f})
 			
-			set {_link} to "https://raw.githubusercontent.com/DaRealPilot/JavaSkript/main/JavaSkript.sk"
+			set {_link} to "https://raw.githubusercontent.com/DjDisaster/JavaSkript/main/JavaSkript.sk"
 			set {_inStream} to new URL({_link})
 			set {_inStream} to {_inStream}.openStream()
-			Files.copy({_inStream}, {_file}.getPath(), StandardCopyOption.REPLACE_EXISTING)
+			Files.copy({_inStream}, {_file}.toPath(), StandardCopyOption.REPLACE_EXISTING)
+			send "&7Skript in &e&n%{_f}%&7 has been updated from <link:https://github.com/DjDisaster/JavaSkript/blob/main/JavaSkript.sk>&b&ngithub.com/DjDisaster/JavaSkript/blob/main/JavaSkript.sk"
+		else if arg-1 = "UpdateSyntax":
+			UpdateJSK()
+			send "&7Syntax in &e&n%{@JSKDefault}%&7 has been updated from <link:https://github.com/DjDisaster/JavaSkript/blob/main/Syntax.jsk>&b&ngithub.com/DjDisaster/JavaSkript/blob/main/Syntax.jsk"
+		else if arg-1 = "UpdateVariableManager":
+			UpdateVariableManager()
+			send "&7VariableManager in &e&n%join {@LibsDefault}, "VariableManager.jar"%&7 has been updated from <link:https://github.com/DjDisaster/JavaSkript/blob/main/Syntax.jsk>&b&ngithub.com/DjDisaster/JavaSkript/blob/main/VariableManager.jar"
+
+		else:
+			send "&4[&c------------------&4]"
+			send "&3Invalid command out of:"
+			send "&3/JavaSkript Update"
+			send "&3/JavaSkript UpdateSyntax"
+			send "&3/JavaSkript UpdateVariableManager"
+			send "&4[&c------------------&4]"
+function UpdateJSK():
+	set {_file} to new File({@JSKDefault})
+	
+	set {_link} to "https://raw.githubusercontent.com/DjDisaster/JavaSkript/main/Syntax.jsk"
+	set {_inStream} to new URL({_link})
+	set {_inStream} to {_inStream}.openStream()
+	Files.copy({_inStream}, {_file}.toPath(), StandardCopyOption.REPLACE_EXISTING)
+	
+function UpdateVariableManager():
+	set {_file} to new File(join {@LibsDefault}, "VariableManager.jar")
+	#set {_file2} to new File(join {@LibsDefault}, "VariableManager.jar")
+	
+	set {_link} to "https://raw.githubusercontent.com/DjDisaster/JavaSkript/main/VariableManager.jar"
+	set {_inStream} to new URL({_link})
+	set {_inStream} to {_inStream}.openStream()
+	Files.copy({_inStream}, {_file}.toPath(), StandardCopyOption.REPLACE_EXISTING)
+	
+	stop
+
+
+	
+function ReadJSK():
+	set {_file} to new File({@JSKDefault})
+	set {_lines::*} to ...Files.readAllLines({_file}.toPath())
+	loop {_lines::*}:
+		if loop-value != "":
+			if loop-value.substring(0,1) = "	":
+				set {_s} to true 
+				set {_line} to loop-value.substring(1) 
+				set {_a::*} to ...{_line}.split(": ", 2)
+				set tag {_a::1} of {_cnbt} to "%{_a::2}%"
+			else:
+				if {_cnbt} is set:
+					AddSyntax({_cnbt})
+					broadcast "NBT: %{_cnbt}%"
+				set {_f} to loop-value
+				set {_cnbt} to nbt from "{Syntax:""%{_f}.substring(0, {_f}.length()-1)%""}"
+	AddSyntax({_cnbt})
