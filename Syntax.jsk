@@ -24,3 +24,8 @@ expression all players:
 	return type: Player
 	return: list
 	ConvertInto: Bukkit.getOnlinePlayers()
+
+expression %number% times:
+	return type: Number
+	return: list
+	ConvertInto: IntStream.rangeClosed(0, %expr-1%).boxed().toList()
