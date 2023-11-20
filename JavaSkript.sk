@@ -31,7 +31,7 @@ function mergeLiteral(n: nbt compounds) :: nbt compounds:
 	
 # The function for tokenizing a string, joins them first.
 # Accepts a list.
-function tokenize(s: strings):
+function tokenise(s: strings) :: nbt compounds:
 	# Going to put everything into a single string for ease
 	set {_s} to join (join {_s::*} with ";"), ";"
 	
@@ -41,6 +41,7 @@ function tokenize(s: strings):
 	
 	# Loop each character in the string.
 	# Tokens are stored in {_tokens::*}
+	broadcast "IN: %{_s}%"
 	while {_pointer} < {_sLength}:
 		set {_c} to "%{_s}.charAt({_pointer}).toString()%"
 		
@@ -52,17 +53,21 @@ function tokenize(s: strings):
 				add 1 to {_pointer}
 			remove 1 from {_pointer}
 			if {_v} = "Return":
-				add newToken("Return", null) to {_tokens::*}
+				add newToken("return", null) to {_tokens::*}
 			else if {_v} = "Function":
-				add newToken("Function", null) to {_tokens::*}
+				add newToken("function", null) to {_tokens::*}
+			else if {_v} = "IF":
+				add newToken("IF", null) to {_tokens::*}
+			else if {_v} = "Command":
+				add newToken("Command", null) to {_tokens::*}
 			else:
 				# Its probably a literal.
-				add newToken("Literal", {_v}) to {_tokens::*}
+				add newToken("literal", {_v}) to {_tokens::*}
 				# If the last token was also a literal, we may aswell merge them. (BELOW FUNCTION)
 				set {_tokens::*} to mergeLiteral({_tokens::*})
 		# Checks for a semi-colon.
 		else if {_c}.matches(";") = true:
-			add newToken("SemiColon", null) to {_tokens::*}
+			add newToken("semicolon", null) to {_tokens::*}
 		# Checks for a number 0-9.
 		else if {_c}.matches("[0-9]") = true:
 			set {_v} to ""
@@ -70,17 +75,21 @@ function tokenize(s: strings):
 				set {_v} to join {_v}, "%{_s}.charAt({_pointer})%"
 				add 1 to {_pointer}
 			remove 1 from {_pointer}
-			add newToken("Number", {_v}) to {_tokens::*}
+			broadcast "&cMLIT"
+			add newToken("int_lit", {_v}) to {_tokens::*}
 		# Checks for an indent/tab.
 		else if {_c}.equals("	") = true:
 			while {_s}.charAt({_pointer}).toString().equals("	") = true:
 				add newToken("Indentation", null) to {_tokens::*}
 				add 1 to {_pointer}
 			remove 1 from {_pointer}
+		else if {_c}.equals(" "):
+			# Something is needed here to prevent a warning.
+			add 69 to {_69}
 		# Checks for anything else and assumes literal.
 		else:
 			# Its probably a literal. Likely a colon or a space.
-			add newToken("Literal", {_c}) to {_tokens::*}
+			add newToken("literal", {_c}) to {_tokens::*}
 			# If the last token was also a literal, we may aswell merge them. (BELOW FUNCTION)
 			set {_tokens::*} to mergeLiteral({_tokens::*})
 
@@ -91,7 +100,86 @@ function tokenize(s: strings):
 	
 		add 1 to {_pointer}
 		
-	broadcast "%{_tokens::*}%"
+	return {_tokens::*}
+	
+function ast(tokens: nbt compounds, n: number) :: objects:
+	set {_nClone} to {_n}
+	#broadcast "AST: %{_tokens}% WITH %{_n}%"
+	broadcast "&4START"
+	loop getAst():
 		
+		set {_syntax::*} to tag "syntax" of loop-value 
+		set {_size} to size of {_syntax::*}
+		broadcast "  - &c%{_size}%"
+		broadcast "A"
+		broadcast "N: %{_n}%, SIZE: %{_size}%"
+		broadcast "%{_n} + {_size}% <=  %size of {_tokens::*}%"
+		broadcast "B2"
+		if ({_n} + {_size}) <= (size of {_tokens::*} + 1):
+			broadcast "&aPASS"
+			loop 0, (({_size} - 1) times):
+				set {_token} to {_tokens::%{_n} + loop-value-2%}
+				broadcast "%getType({_token})% = %getType({_syntax::%loop-value-2 + 1%})% (%{_syntax::%loop-value-2%}%)"
+				if getType({_token}) = getType({_syntax::%loop-value-2 + 1%}):
+					broadcast "MATCH"
+					set {_f} to true
+				else:
+					broadcast "NON-MATCH"
+			if {_f} = true:
+				set {_n} to {_n} + {_size}
+				stop loop 
+	broadcast "F: %{_f}%, N: %{_n}%"
+	if {_f} != true:
+		return "ERROR"
+	return {_n}
+	
+function tokens_to_java(tokens: nbt compounds):
+	set {_out} to ""
+	set {_size} to size of {_tokens::*}
+	set {_i} to 1
+	
+	# Iterating through all of the tokens
+	while {_i} <= {_size}:
+		set {_token} to {_tokens::%{_i}%}
+		loop {ast::*}:
+			set {_o::*} to ast({_tokens::*}, {_i})
+			if {_o::1} is set:
+				if {_o::1} = "ERROR":
+					broadcast "&4[ERROR 2] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
+					stop
+				# Something has matched with the tokens.
+				broadcast "&b&l&n%{_o::1}%,%{_o::2}%"
+				
+			else:
+				# Throw an error as nothing matched.
+				broadcast "&4[ERROR 1] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
+				stop
+					
+					
+		add 1 to {_i}
+		
+		add 1 to {_q}
+		if {_q} >= 1000:
+			broadcast "Q EXCEED"
+			stop loop
+	broadcast "OUT: %{_out}%"
+function newSyntax(s: string, s2: string) :: nbt compound:
+	set {_nbt} to nbt from "{}"
+	set tag "syntax" of {_nbt} to tokenise({_s})
+	set tag "transpiled" of {_nbt} to {_s2}
+	
+	return {_nbt}
+function initSyntax():
+	delete {ast::*}
+	set {ast::1} to newSyntax("return 1", "return %%val-1%%")
+	
+	broadcast "&cAST:"
+	broadcast "&b%{ast::*}%"
+function getAst() :: nbt compounds:
+	return {AST::*}
+	
+	
 on load:
-	tokenize("function test():", "	return 0")
+	set {_tokens::*} to tokenise("return 0")
+	initSyntax()
+	tokens_to_java({_tokens::*})
