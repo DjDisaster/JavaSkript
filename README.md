@@ -5,4 +5,4 @@ To use simply add the JavaSkript.sk to
 your server and other things are auto
 installed.
 
-Required: Skript, Skript-reflect, Skbee, Addonpatcher (on skript 2.7+)
+Required: Skript, Skript-reflect, Skbee, Addonpatcher (Addonpatcher only needed on skript 2.7+)
