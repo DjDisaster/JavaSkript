@@ -33,7 +33,7 @@ function mergeLiteral(n: nbt compounds) :: nbt compounds:
 # Accepts a list.
 function tokenise(s: strings) :: nbt compounds:
 	# Going to put everything into a single string for ease
-	set {_s} to join (join {_s::*} with ";"), ";"
+	set {_s} to join {_s::*}#(join {_s::*} with ";"), ";"
 	
 	# Get the length and set the current point.
 	set {_pointer} to 0
@@ -60,6 +60,10 @@ function tokenise(s: strings) :: nbt compounds:
 				add newToken("IF", null) to {_tokens::*}
 			else if {_v} = "Command":
 				add newToken("Command", null) to {_tokens::*}
+			else if {_v} = "Loop":
+				add newToken("Loop", null) to {_tokens::*}
+			else if {_v} = "Set":
+				add newToken("Set", null) to {_tokens::*}
 			else:
 				# Its probably a literal.
 				add newToken("literal", {_v}) to {_tokens::*}
@@ -78,20 +82,46 @@ function tokenise(s: strings) :: nbt compounds:
 			broadcast "&cMLIT"
 			add newToken("int_lit", {_v}) to {_tokens::*}
 		# Checks for an indent/tab.
-		else if {_c}.equals("	") = true:
+		else if {_c}.equals("	"):
+			broadcast "&4&l&n&k|||||||&r---- INDENTATION"
 			while {_s}.charAt({_pointer}).toString().equals("	") = true:
 				add newToken("Indentation", null) to {_tokens::*}
 				add 1 to {_pointer}
 			remove 1 from {_pointer}
-		else if {_c}.equals(" "):
+		else if {_c}.equals(""""):
+			add 1 to {_pointer}
+			set {_f} to ""
+			while {_s}.charAt({_pointer}).toString().equals("""") = false:
+				set {_f} to join "%{_f}%", "%{_s}.charAt({_pointer})%"
+				
+				add 1 to {_pointer}
+				add 1 to {_maxStringSize}
+				if {_maxStringSize} >= 10000:
+					broadcast "&7You seem to have an extremely large string or not closing one."
+					stop loop
+			add newToken("String", """%{_f}%""") to {_tokens::*}
+		else if {_c}.equals("{"):
+			add 1 to {_pointer}
+			set {_f} to ""
+			while {_s}.charAt({_pointer}).toString().equals("}") = false:
+				set {_f} to join "%{_f}%", "%{_s}.charAt({_pointer})%"
+				
+				add 1 to {_pointer}
+				add 1 to {_maxStringSize}
+				if {_maxStringSize} >= 10000:
+					broadcast "&7You seem to have an extremely large variable name or not closing one."
+					stop loop
+			add newToken("Variable", "Variables.get(""%{_f}%"")") to {_tokens::*}
+			
+		#else if {_c}.equals(" "):
 			# Something is needed here to prevent a warning.
-			add 69 to {_69}
+			#add 69 to {_69}
 		# Checks for anything else and assumes literal.
 		else:
 			# Its probably a literal. Likely a colon or a space.
 			add newToken("literal", {_c}) to {_tokens::*}
 			# If the last token was also a literal, we may aswell merge them. (BELOW FUNCTION)
-			set {_tokens::*} to mergeLiteral({_tokens::*})
+			#set {_tokens::*} to mergeLiteral({_tokens::*})
 
 		add 1 to {_n}
 		if {_n} >= 1000:
@@ -107,6 +137,7 @@ function ast(tokens: nbt compounds, n: number) :: objects:
 	#broadcast "AST: %{_tokens}% WITH %{_n}%"
 	broadcast "&4START"
 	loop getAst():
+		broadcast "L AST"
 		
 		set {_syntax::*} to tag "syntax" of loop-value 
 		set {_size} to size of {_syntax::*}
@@ -119,67 +150,265 @@ function ast(tokens: nbt compounds, n: number) :: objects:
 			broadcast "&aPASS"
 			loop 0, (({_size} - 1) times):
 				set {_token} to {_tokens::%{_n} + loop-value-2%}
-				broadcast "%getType({_token})% = %getType({_syntax::%loop-value-2 + 1%})% (%{_syntax::%loop-value-2%}%)"
+				
+				if getType({_token}) = "semicolon":
+					stop loop
+					
+				if getType({_token}) = "Variable":
+					if getType({_syntax::%loop-value-2 + 1%}) != "literal":
+						set {_f} to tag "transpiled" of loop-value-1
+						continue
 				if getType({_token}) = getType({_syntax::%loop-value-2 + 1%}):
-					broadcast "MATCH"
-					set {_f} to true
+					if getType({_token}) = "literal":
+						if getValue({_token}) != getValue({_syntax::%loop-value-2 + 1%}):
+							broadcast "&cCONTINUE [SKIP] - %getValue({_token})% - %getValue({_syntax::%loop-value-2 + 1%})%"
+							broadcast "&b%{_token}% & %{_syntax::%loop-value-2 + 1%}%"
+							delete {_f}
+							stop 1 loop
+					set {_f} to tag "transpiled" of loop-value-1
+					broadcast "%loop-value-1%"
+					broadcast "SET [%{_f}%] "
 				else:
-					broadcast "NON-MATCH"
-			if {_f} = true:
+					broadcast "%getType({_token})% = %getType({_syntax::%loop-value-2 + 1%})%"
+					broadcast "Delete F"
+					delete {_f}
+					stop 1 loop
+			
+					
+			if {_f} is set:
+				broadcast "F IS: [%{_f}%]"
+				broadcast "F: %{_n}% + %{_size}%"
 				set {_n} to {_n} + {_size}
 				stop loop 
 	broadcast "F: %{_f}%, N: %{_n}%"
-	if {_f} != true:
+	if {_f} is not set:
 		return "ERROR"
-	return {_n}
+	broadcast "RETURN: %{_n}% and %{_f}%"
+	return {_n}, {_f}
 	
-function tokens_to_java(tokens: nbt compounds):
+function tokens_expressions(tokens: nbt compounds) :: string:
+	broadcast {_tokens::*}
+	broadcast ""
+	set {_exp::*} to getExp()
+	loop getExp():
+		set {_t::*} to (compound list tag "syntax" of loop-value) ? tag "syntax" of loop-value
+		set {_syntaxSize} to size of {_t::*}
+		
+		# We need to re-get the size as the list may change in size.
+		set {_size} to size of {_tokens::*}
+	
+		set {_i} to 1
+		# Searching for all times this expression is used.
+		while {_i} <= {_size}:
+			loop {_t::*}:
+				broadcast "LOOP"
+				set {_type} to getType(loop-value-2)
+				set {_value} to getValue(loop-value-2)
+				
+				set {_token} to {_tokens::%{_i}%}
+				set {_type2} to getType({_token})
+				set {_value2} to getValue({_token})
+				
+				if {_type} != {_type2}:
+					broadcast "%{_type}% != %{_type2}%"
+					stop loop
+				if {_type} = "Literal":
+					if {_value2}.endsWith({_value}) = false:
+						broadcast "&c%{_value}%.endsWith(%{_value2}%)"
+						broadcast "V2:%{_value2}%"
+						broadcast "V:%{_value}%"
+						broadcast "%{_token}%"
+						stop loop 
+					broadcast "%{_value2}% ends with %{_value}%"
+				broadcast "%{_t::*}% at %{_i}% passed?"
+				broadcast "%{_token}%"
+				loop (size of {_t::*} - 1) times:
+					broadcast "DEL %{_tokens::%loop-value-3 + {_i} + 1%}%"
+					broadcast "DEL2: %{_tokens::%loop-value-3 + {_i}%}% "
+					broadcast "DEL£: %{_tokens::%loop-value-3 + {_i} - 1%}%"
+					broadcast "%loop-value-3% - %{_i}% "
+					delete {_tokens::%loop-value-3 + {_i}%}
+				set {_newToken} to nbt from "{}"
+				set {_clz} to tag "expr;class" of loop-value-1
+				set tag "type" of {_newToken} to {_clz}
+				set {_transpiled} to tag "transpiled" of loop-value-1
+				set tag "value" of {_newToken} to {_transpiled}
+				set {_tokens::%{_i}%} to {_newToken}
+			
+			add 1 to {_i}
+			
+			add 1 to {_b}
+			if {_b} >= 99:
+				broadcast "Cancel"
+				stop
+				
+		broadcast "Final:"
+		broadcast {_tokens::*}
+	
+	
+function tokens_to_java(tokens: nbt compounds) :: string:
 	set {_out} to ""
 	set {_size} to size of {_tokens::*}
 	set {_i} to 1
 	
+	
 	# Iterating through all of the tokens
 	while {_i} <= {_size}:
 		set {_token} to {_tokens::%{_i}%}
-		loop {ast::*}:
-			set {_o::*} to ast({_tokens::*}, {_i})
-			if {_o::1} is set:
-				if {_o::1} = "ERROR":
-					broadcast "&4[ERROR 2] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
-					stop
-				# Something has matched with the tokens.
-				broadcast "&b&l&n%{_o::1}%,%{_o::2}%"
-				
-			else:
-				# Throw an error as nothing matched.
-				broadcast "&4[ERROR 1] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
+		
+
+		#set {_lastIndentation} to {_indentation}
+		set {_indentation} to 0
+		set {_t} to {_tokens::%{_i}%}
+		broadcast "[][] TOKEN: %{_t}% I: %{_i}%"
+		while tag "type" of {_tokens::%{_i}%} = "Indentation":
+			add 1 to {_i}
+			add 1 to {_indentation}
+		set {_o::*} to ast({_tokens::*}, {_i})
+		if {_o::1} is set:
+			broadcast "INDENTATION: %{_indentation}%"
+			broadcast "O::1 = %{_o::1}%"
+			if {_o::1} = "ERROR":
+				broadcast "&4[ERROR 2] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
 				stop
+			# Something has matched with the tokens.
+			broadcast "&b&l&n%{_o::1}%,%{_o::2}%"
+			broadcast "&b&l&n%{_tokens::*}%"
+			
+			# Jumps pointer to end of current syntax 
+			set {_i} to {_o::1}
+			broadcast "&3<> IJUMP: %{_i}%"
+			
+			# Create an new string to append change	s to for transpiling 
+			# TODO: Add stuff for checking where multiple things are required
+			# TODO: Add support for brackets { and }
+			set {_s} to "%{_o::2}%"
+			set {_marker} to 0
+			
+			set {_q} to ""
+			loop {_indentation} times:
+				set {_q} to "%{_q}%    "
+			
+			broadcast "S: %{_s}%, Marker: %{_marker}%"
+			delete {_val::*}
+			loop {_tokens::*}:
+				
+				set {_type} to tag "type" of loop-value 
+				set {_value} to tag "value" of loop-value
+				if {_type} = "literal":
+					continue
+				if {_value} != "NULL":
+					add 1 to {_marker}
+					broadcast "Replace %%val-%{_marker}%%% in %{_s}% with %{_value}% [%loop-value-2%]"
+					replace all "%%val-%{_marker}%%%" in {_s} with "%{_value}%"
+					set {_val::%{_marker}%} to {_value}
+			loop {_tokens::*}:
+				set {_type} to tag "type" of loop-value 
+				set {_value} to tag "value" of loop-value
+				if {_type} = "Set":
+					broadcast "&9%loop-value% SET"
+					scopeVariable({_val::1})
+			
+			broadcast "&eS: %{_s}%"
+			replace all "%nl%" in {_s} with "%nl%%{_q}%"
+			
+			set {_indentationClone} to {_indentation}
+			broadcast "%{_indentation}% | %{_lastIndentation}%"
+			while {_indentation} > {_lastIndentation}:
+				remove 1 from {_indentation}
+				set {_out} to join {_out}, " {"
+			while {_indentation} < {_lastIndentation}:
+				add 1 to {_indentation}
+				set {_out} to join {_out}, " }%indentsToString({_indentation})%%nl%"
+				
+			set {_lastIndentation} to {_indentationClone}
+			
+
+			
+			# Add the new value to OUT.
+			set {_out} to join {_out}, {_s}
+			
+			broadcast "NewOUT: %{_out}%"
+			
+		else:
+			# Throw an error as nothing matched.
+			broadcast "&4[ERROR 1] &cThere was an error with: &b%{_tokens::%{_i}%}% &7at &b%{_i}%"
+			stop
 					
 					
-		add 1 to {_i}
+		#add 1 to {_i}
 		
 		add 1 to {_q}
 		if {_q} >= 1000:
 			broadcast "Q EXCEED"
 			stop loop
-	broadcast "OUT: %{_out}%"
+	set {_indentation} to 0
+	while {_lastIndentation} > {_indentation}:
+		remove 1 from {_lastIndentation}
+		set {_out} to join {_out}, "%nl%%indentsToString({_lastIndentation})%}"
+		
+		add 1 to {_zz}
+		if {_zz} >= 100:
+			broadcast "100"
+			stop loop
+		
+	broadcast "&c&nFINAL OUT:&r %{_out}%"
+	
+	return {_out}
+	
+	
+function scopeVariable(s: string):
+	if {JavaSkript::ScopedVariables::*} does not contain {_s}:
+		add {_s} to {JavaSkript::ScopedVariables::*}
+
+function indentsToString(indentation: number) :: text:
+	set {_q} to ""
+	loop {_indentation} times:
+		set {_q} to "%{_q}%    "
+	return {_q}
 function newSyntax(s: string, s2: string) :: nbt compound:
+	set {_s2} to join "%nl%", {_s2}
 	set {_nbt} to nbt from "{}"
 	set tag "syntax" of {_nbt} to tokenise({_s})
 	set tag "transpiled" of {_nbt} to {_s2}
 	
 	return {_nbt}
+function newExpression(s: string, s2: string, clz: string) :: nbt compound:
+	set {_nbt} to newSyntax({_s}, {_s2})
+	set tag "expr;class" of {_nbt} to {_clz}
+	
+	return {_nbt}
+	
 function initSyntax():
 	delete {ast::*}
-	set {ast::1} to newSyntax("return 1", "return %%val-1%%")
+	set {ast::1} to newSyntax("broadcast ""hello""", "Bukkit.broadcastMessage(""%%val-1%%"");")
+	set {ast::2} to newSyntax("on load:", "static")
+	set {ast::3} to newSyntax("loop 10 times:", "for(int i = 0; i < %%val-1%%; ++i)")
+	set {ast::4} to newSyntax("set {test} to 5", "%%val-1%%.set(%%val-2%%);")
+	
+	set {exp::1} to newExpression("all players", "Bukkit.getOnlinePlayers();", "players")
 	
 	broadcast "&cAST:"
 	broadcast "&b%{ast::*}%"
+
+function getExp() :: nbt compounds:
+	return {exp::*}
+# Gets all currently available AST
 function getAst() :: nbt compounds:
 	return {AST::*}
+
+on load:
+	create new section stored in {JavaSkript::LoopRule}:
+		# Rule for loops
+		# TODO: Add expressions
 	
 	
 on load:
-	set {_tokens::*} to tokenise("return 0")
+	set {_tokens::*} to tokenise("set {e} to all players")
+	broadcast "%{_tokens::*}%%nl%%nl%"
 	initSyntax()
-	tokens_to_java({_tokens::*})
+	
+	delete {JavaSkript::ScopedVariables::*}
+	broadcast "&c---"
+	set {_tokens::*} to tokens_expressions({_tokens::*})
+	#tokens_to_java({_tokens::*})
