@@ -135,30 +135,28 @@ function tokenise(s: strings) :: nbt compounds:
 function ast(tokens: nbt compounds, n: number) :: objects:
 	set {_nClone} to {_n}
 	#broadcast "AST: %{_tokens}% WITH %{_n}%"
-	broadcast "&4START"
+	broadcast "&4START: %{_n}%"
 	loop getAst():
-		broadcast "L AST"
 		
 		set {_syntax::*} to tag "syntax" of loop-value 
 		set {_size} to size of {_syntax::*}
-		broadcast "  - &c%{_size}%"
-		broadcast "A"
-		broadcast "N: %{_n}%, SIZE: %{_size}%"
-		broadcast "%{_n} + {_size}% <=  %size of {_tokens::*}%"
-		broadcast "B2"
-		if ({_n} + {_size}) <= (size of {_tokens::*} + 1):
+		
+		
+		if (size of {_tokens::*} - {_n}) >= 0:
 			broadcast "&aPASS"
 			loop 0, (({_size} - 1) times):
 				set {_token} to {_tokens::%{_n} + loop-value-2%}
+				set {_type} to getType({_token})
 				
-				if getType({_token}) = "semicolon":
+				
+				if {_type} = "semicolon":
 					stop loop
 					
-				if getType({_token}) = "Variable":
+				if {_type} = "Variable":
 					if getType({_syntax::%loop-value-2 + 1%}) != "literal":
 						set {_f} to tag "transpiled" of loop-value-1
 						continue
-				if getType({_token}) = getType({_syntax::%loop-value-2 + 1%}):
+				if {_type} = getType({_syntax::%loop-value-2 + 1%}):
 					if getType({_token}) = "literal":
 						if getValue({_token}) != getValue({_syntax::%loop-value-2 + 1%}):
 							broadcast "&cCONTINUE [SKIP] - %getValue({_token})% - %getValue({_syntax::%loop-value-2 + 1%})%"
@@ -169,16 +167,17 @@ function ast(tokens: nbt compounds, n: number) :: objects:
 					broadcast "%loop-value-1%"
 					broadcast "SET [%{_f}%] "
 				else:
-					broadcast "%getType({_token})% = %getType({_syntax::%loop-value-2 + 1%})%"
-					broadcast "Delete F"
+					broadcast "DELF &c%getType({_token})% != &e%getType({_syntax::%loop-value-2 + 1%})%"
+					broadcast "NEXT: %{_tokens::%{_n} + loop-value-2 - 1%}%"
+					broadcast "&aEXPECTED: %{_syntax::%loop-value-2%}%"
+					broadcast "&cLoopNumber: &e%loop-value-2%"
 					delete {_f}
 					stop 1 loop
 			
 					
 			if {_f} is set:
 				broadcast "F IS: [%{_f}%]"
-				broadcast "F: %{_n}% + %{_size}%"
-				set {_n} to {_n} + {_size}
+				#set {_n} to {_n} + {_size}
 				stop loop 
 	broadcast "F: %{_f}%, N: %{_n}%"
 	if {_f} is not set:
@@ -186,7 +185,7 @@ function ast(tokens: nbt compounds, n: number) :: objects:
 	broadcast "RETURN: %{_n}% and %{_f}%"
 	return {_n}, {_f}
 	
-function tokens_expressions(tokens: nbt compounds) :: string:
+function tokens_expressions(tokens: nbt compounds) :: nbt compounds:
 	broadcast {_tokens::*}
 	broadcast ""
 	set {_exp::*} to getExp()
@@ -242,11 +241,12 @@ function tokens_expressions(tokens: nbt compounds) :: string:
 				broadcast "Cancel"
 				stop
 				
-		broadcast "Final:"
-		broadcast {_tokens::*}
+		add {_tokens::*} to {_return::*}
+	return {_return::*}
 	
 	
 function tokens_to_java(tokens: nbt compounds) :: string:
+	broadcast "Turning %size of {_tokens::*}% tokens into java code."
 	set {_out} to ""
 	set {_size} to size of {_tokens::*}
 	set {_i} to 1
@@ -404,6 +404,7 @@ on load:
 	
 	
 on load:
+	wait 2 seconds
 	set {_tokens::*} to tokenise("set {e} to all players")
 	broadcast "%{_tokens::*}%%nl%%nl%"
 	initSyntax()
@@ -411,4 +412,7 @@ on load:
 	delete {JavaSkript::ScopedVariables::*}
 	broadcast "&c---"
 	set {_tokens::*} to tokens_expressions({_tokens::*})
-	#tokens_to_java({_tokens::*})
+	wait 2 seconds
+	broadcast "", "&cTO JAVA:"
+	broadcast pretty nbt of {_tokens::*}
+	tokens_to_java({_tokens::*})
